@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Monkey vs Bugs</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+  <style>
+    body { 
+      margin: 0; 
+      display: flex; 
+      justify-content: center; 
+      align-items: center; 
+      height: 100vh; 
+      background: #a3d9a5;
+      font-family: Arial, sans-serif;
+      overflow: hidden;
+    }
+    canvas { background: #dfffe0; border: 2px solid #333; touch-action: none; }
+    #controls {
+      position: absolute;
+      bottom: 20px;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-gap: 10px;
+      width: 220px;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 14px;
+      border-radius: 15px;
+      border: none;
+      background: #ffcc66;
+    }
+    /* overlay text */
+    .overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 300px;
+      height: 500px;
+      pointer-events: none;
+      display:flex;
+      justify-content:center;
+      align-items:center;
+      flex-direction:column;
+      color: rgba(255,0,0,0.9);
+      font-weight:700;
+      font-family: Arial, sans-serif;
+    }
+    .hint {
+      font-size: 14px;
+      color: #222;
+      font-weight: 600;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas" width="300" height="500"></canvas>
+
+  <div id="controls">
+    <button onclick="moveMonkey(-1,0)">⟵</button>
+    <button onclick="moveMonkey(0,-1)">⬆</button>
+    <button onclick="moveMonkey(1,0)">⟶</button>
+    <div></div>
+    <button onclick="moveMonkey(0,1)">⬇</button>
+    <div></div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    // positions
+    const treePositions = [50, 125, 200];   // tree trunk x
+    const treeCenterOffset = 12;            // center offset used for monkey/fruits
+    const bugPositions = [87, 162];
+        // x positions between trees (centers)
+
+    // game state
+    let monkeyCol = 1;
+    let monkeyY = 350;
+    let bugs = [];
+    let fruits = [];
+    let score = 0;
+    let gameOver = false;
+
+    // fruit types
+    const fruitTypes = [
+      { emoji: "🍌", points: 10 },
+      { emoji: "🍎", points: 20 },
+      { emoji: "🍇", points: 30 }
+    ];
+
+    // sizes (all treated as centered rectangles)
+    const MONKEY_W = 36, MONKEY_H = 36;
+    const BUG_W = 28, BUG_H = 28;
+    const FRUIT_W = 24, FRUIT_H = 24;
+
+    // movement
+    function moveMonkey(dx, dy) {
+      if (dx === -1 && monkeyCol > 0) monkeyCol--;
+      if (dx === 1 && monkeyCol < 2) monkeyCol++;
+      if (dy === -1 && monkeyY > 150) monkeyY -= 40;
+      if (dy === 1 && monkeyY < 420) monkeyY += 40;
+    }
+
+    // spawn a falling bug (only when game not over)
+    function spawnBug() {
+      if (gameOver) return;
+      const pos = Math.floor(Math.random() * bugPositions.length);
+      bugs.push({ x: bugPositions[pos], y: -30 }); // start above screen
+    }
+
+    // Spawn fruit at top randomly
+  function spawnFruit() {
+  const x = treePositions[Math.floor(Math.random() * 3)] + 12; // center of tree
+  const type = fruitTypes[Math.floor(Math.random() * fruitTypes.length)];
+  fruits.push({ x: x, y: -20, type: type }); // start above screen
+}
+
+    // basic rectangle-overlap check (rectangles are given by center coords + size)
+    function rectsOverlap(cx1, cy1, w1, h1, cx2, cy2, w2, h2) {
+      const l1 = cx1 - w1/2, r1 = cx1 + w1/2, t1 = cy1 - h1/2, b1 = cy1 + h1/2;
+      const l2 = cx2 - w2/2, r2 = cx2 + w2/2, t2 = cy2 - h2/2, b2 = cy2 + h2/2;
+      return !(l1 >= r2 || r1 <= l2 || t1 >= b2 || b1 <= t2);
+    }
+
+    // swipe controls
+    let startX = 0, startY = 0;
+    document.addEventListener("touchstart", e => {
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+    }, {passive:true});
+    document.addEventListener("touchend", e => {
+      if (!e.changedTouches || e.changedTouches.length === 0) return;
+      let endX = e.changedTouches[0].clientX;
+      let endY = e.changedTouches[0].clientY;
+      let dx = endX - startX;
+      let dy = endY - startY;
+
+      if (Math.abs(dx) > Math.abs(dy)) {
+        if (dx > 50) moveMonkey(1,0);
+        if (dx < -50) moveMonkey(-1,0);
+      } else {
+        if (dy > 50) moveMonkey(0,1);
+        if (dy < -50) moveMonkey(0,-1);
+      }
+    }, {passive:true});
+
+    // click/tap canvas to restart if game over
+    canvas.addEventListener('click', () => { if (gameOver) resetGame(); });
+    canvas.addEventListener('touchstart', () => { if (gameOver) resetGame(); }, {passive:true});
+
+    // draw a nicer tree
+    function drawTree(x) {
+      // trunk
+      ctx.fillStyle = "#8B4513";
+      ctx.fillRect(x + 5, 120, 15, 360);
+
+      // bark lines
+      ctx.strokeStyle = "#5C3317";
+      ctx.beginPath();
+      ctx.moveTo(x + 8, 150);
+      ctx.lineTo(x + 8, 460);
+      ctx.moveTo(x + 15, 180);
+      ctx.lineTo(x + 15, 460);
+      ctx.stroke();
+
+      // canopy
+      ctx.fillStyle = "#228B22";
+      ctx.beginPath();
+      ctx.arc(x + 12, 90, 25, 0, Math.PI * 2);
+      ctx.arc(x - 5, 100, 20, 0, Math.PI * 2);
+      ctx.arc(x + 30, 100, 20, 0, Math.PI * 2);
+      ctx.arc(x + 12, 115, 22, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // reset game
+    function resetGame() {
+      monkeyCol = 1;
+      monkeyY = 350;
+      bugs = [];
+      fruits = [];
+      score = 0;
+      gameOver = false;
+    }
+
+    // game update + draw
+    function update() {
+      // clear
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // background could be drawn here (kept simple)
+
+      // trees
+      for (let i = 0; i < 3; i++) drawTree(treePositions[i]);
+
+      // update & draw bugs (only move them if not game over)
+      for (let i = 0; i < bugs.length; i++) {
+        if (!gameOver) bugs[i].y += 3;
+        // draw bug centered
+        ctx.save();
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.font = "26px Arial";
+        ctx.fillText("🐞", bugs[i].x, bugs[i].y);
+        ctx.restore();
+
+        // collision with monkey (tight bounding-box overlap)
+        const monkeyCx = treePositions[monkeyCol] + treeCenterOffset;
+        const monkeyCy = monkeyY;
+        const bugCx = bugs[i].x;
+        const bugCy = bugs[i].y;
+
+        if (rectsOverlap(monkeyCx, monkeyCy, MONKEY_W, MONKEY_H, bugCx, bugCy, BUG_W, BUG_H)) {
+          gameOver = true;
+        }
+      }
+      // remove off-screen bugs
+      bugs = bugs.filter(b => b.y < canvas.height + 40);
+
+      // draw fruits & check collection
+      for (let i = 0; i < fruits.length; i++) {
+  if (!gameOver) fruits[i].y += 2; // fall speed of fruit
+  ctx.font = "25px Arial";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(fruits[i].type.emoji, fruits[i].x, fruits[i].y);
+
+  // check collection
+  let dx = Math.abs(fruits[i].x - (treePositions[monkeyCol] + 12));
+  let dy = Math.abs(fruits[i].y - monkeyY);
+  if (dx < 20 && dy < 20) {
+    score += fruits[i].type.points;
+    fruits.splice(i, 1);
+    i--;
+  }
+}
+
+// remove fruits that fall off the canvas
+fruits = fruits.filter(f => f.y < canvas.height + 20);
+
+      // draw laddu (centered)
+      ctx.save();
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.font = "36px Arial";
+      ctx.fillText("🐒", treePositions[monkeyCol] + treeCenterOffset, monkeyY);
+      ctx.restore();
+
+      // score
+      if (!gameOver) ;
+      // score (top-right corner, always visible)
+        ctx.fillStyle = "black";
+        ctx.font = "18px Arial";
+        ctx.textAlign = "right";
+        ctx.textBaseline = "top";
+        ctx.fillText("Score: " + score, canvas.width - 10, 10);
+
+
+      // game over overlay
+      if (gameOver) {
+        ctx.fillStyle = "rgba(0,0,0,0.5)";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "white";
+        ctx.font = "28px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("Game Over!", canvas.width/2, canvas.height/2 - 54);
+        ctx.fillText("Laddu Lost", canvas.width/2, canvas.height/2 - 10);
+        ctx.font = "16px Arial";
+        ctx.fillText("Tap to restart", canvas.width/2, canvas.height/2 + 24);
+      }
+    }
+
+    // start spawners
+    setInterval(spawnBug, 1200);
+    setInterval(spawnFruit, 2500); // spawn a fruit every 2.5s
+
+    // game loop
+    setInterval(update, 30);
+
+    // initial draw
+    update();
+
+  </script>
+</body>
+</html>
